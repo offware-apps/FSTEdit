@@ -148,8 +148,8 @@ MODEL_DIR=path/to/whisper-base_timestamped node scripts/record-demo.mjs
 
 Every push to `main` deploys to GitHub Pages through
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml), after the unit
-tests pass. The build uses relative paths, so `dist/` runs from any folder of
-any static host.
+and browser tests pass. The build uses relative paths, so `dist/` runs from any
+folder of any static host.
 
 | Folder | What is in it |
 | --- | --- |
