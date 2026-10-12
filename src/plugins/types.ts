@@ -34,6 +34,8 @@ export type TranscriberPlugin = Named & {
   prepare?(again?: boolean): Promise<boolean>;
   /** One line on what the plugin holds or needs, shown under its choice. */
   note?(): string;
+  /** Whether the model is already in this browser, so choosing it downloads nothing. */
+  downloaded?(): Promise<boolean>;
   transcribe(samples: Float32Array, rate: number, options: TranscribeOptions): Promise<Word[]>;
 };
 

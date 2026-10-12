@@ -1,7 +1,7 @@
 import type { Silence, Word } from './cuts';
 
-/** What an undo restores: which words are struck, and the silences with theirs. */
-type Snapshot = { cut: boolean[]; silences: Silence[]; label: string };
+/** What an undo restores: which words are struck and where their cuts' edges sit, and the silences with theirs. */
+type Snapshot = { words: Pick<Word, 'cut' | 'startShift' | 'endShift'>[]; silences: Silence[]; label: string };
 
 const LIMIT = 200;
 
@@ -16,18 +16,35 @@ export class EditHistory {
   ) {}
 
   private snapshot(label: string): Snapshot {
-    return { cut: this.words.map((w) => w.cut), silences: this.silences.map((s) => ({ ...s })), label };
+    return {
+      words: this.words.map(({ cut, startShift, endShift }) => ({ cut, startShift, endShift })),
+      silences: this.silences.map((s) => ({ ...s })),
+      label,
+    };
   }
 
   private restore(s: Snapshot) {
-    this.words.forEach((w, i) => (w.cut = s.cut[i] ?? false));
+    this.words.forEach((w, i) => {
+      const was = s.words[i];
+      w.cut = was?.cut ?? false;
+      w.startShift = was?.startShift;
+      w.endShift = was?.endShift;
+    });
     this.silences = s.silences.map((x) => ({ ...x }));
   }
 
-  /** Records the state before `apply` runs, so one undo reverts all of it. */
-  change(label: string, apply: () => void): void {
-    this.past.push(this.snapshot(label));
-    if (this.past.length > LIMIT) this.past.shift();
+  private lastKey: string | null = null;
+
+  /**
+   * Records the state before `apply` runs, so one undo reverts all of it.
+   * Changes in a row with the same `key`, one edge nudged ten times, undo as one.
+   */
+  change(label: string, apply: () => void, key?: string): void {
+    if (!key || key !== this.lastKey) {
+      this.past.push(this.snapshot(label));
+      if (this.past.length > LIMIT) this.past.shift();
+    }
+    this.lastKey = key ?? null;
     this.future = [];
     apply();
   }
@@ -38,6 +55,7 @@ export class EditHistory {
     this.silences = silences;
     this.past = [];
     this.future = [];
+    this.lastKey = null;
   }
 
   get canUndo(): boolean {
@@ -50,6 +68,7 @@ export class EditHistory {
 
   /** Undoes the last change and returns its label, or null when there is none. */
   undo(): string | null {
+    this.lastKey = null;
     const s = this.past.pop();
     if (!s) return null;
     this.future.push(this.snapshot(s.label));
@@ -58,6 +77,7 @@ export class EditHistory {
   }
 
   redo(): string | null {
+    this.lastKey = null;
     const s = this.future.pop();
     if (!s) return null;
     this.past.push(this.snapshot(s.label));

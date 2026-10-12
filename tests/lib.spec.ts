@@ -51,17 +51,28 @@ describe('ranges', () => {
 });
 
 describe('cutRanges', () => {
+  const plain = (cuts: { start: number; end: number }[]) => cuts.map(({ start, end }) => ({ start, end }));
+
   it('takes a run of struck words as one stretch, pause included', () => {
     const words = [w('a', 0, 1), w('b', 1.2, 2, true), w('c', 2.5, 3, true), w('d', 3.2, 4)];
-    expect(cutRanges(words, [])).toEqual([{ start: 1.2, end: 3 }]);
+    expect(plain(cutRanges(words, []))).toEqual([{ start: 1.2, end: 3 }]);
   });
 
   it('closes a run on the last word', () => {
     const words = [w('a', 0, 1), w('b', 1.2, 2, true)];
-    expect(cutRanges(words, [{ start: 5, end: 6, cut: true }, { start: 7, end: 8, cut: false }])).toEqual([
+    expect(plain(cutRanges(words, [{ start: 5, end: 6, cut: true }, { start: 7, end: 8, cut: false }]))).toEqual([
       { start: 1.2, end: 2 },
       { start: 5, end: 6 },
     ]);
+  });
+
+  it('moves an edge by its shift, and names the item each edge comes from', () => {
+    const words = [w('a', 0, 1), { ...w('b', 1.2, 2, true), startShift: -0.1 }, w('c', 2.5, 3)];
+    const [cut] = cutRanges(words, [{ start: 1.9, end: 2.4, cut: true, endShift: 0.05 }]);
+    expect([cut.start, cut.end].map((t) => t.toFixed(3))).toEqual(['1.100', '2.450']);
+    expect(cut).toMatchObject({ from: { kind: 'word', index: 1 }, to: { kind: 'silence', index: 0 } });
+    // the edge the user moved, and the silence's, are not moved again
+    expect(cut.snap).toEqual({ start: null, end: null });
   });
 
   it('restores the same strikes from the kept stretches', () => {

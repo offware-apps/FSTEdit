@@ -27,10 +27,11 @@ import {
 import './style.css';
 import './plugins/builtin';
 import * as autosave from './app/autosave';
+import * as handles from './app/handles';
 import { Player, type Clip } from './app/player';
 import { TranscriptView } from './app/transcript';
 import { Waveform } from './app/waveform';
-import { cutRanges, keptRanges, restoreCuts, type Range, type Silence } from './lib/cuts';
+import { cutRanges, keptRanges, restoreCuts, type Cut, type Range, type Silence } from './lib/cuts';
 import { fillerIndexes } from './lib/fillers';
 import { EditHistory } from './lib/history';
 import { fromOtio, toOtio, type Additions } from './lib/otio';
@@ -130,6 +131,7 @@ const ui = {
   progress: $<HTMLProgressElement>('progress'),
   cancelJob: $<HTMLButtonElement>('cancel-job'),
   updateApp: $<HTMLButtonElement>('update-app'),
+  reopen: $<HTMLButtonElement>('reopen'),
   exportDialog: $<HTMLDialogElement>('export-dialog'),
   formats: $<HTMLDivElement>('formats'),
   formatOptions: $<HTMLDivElement>('format-options'),
@@ -155,6 +157,8 @@ const SLOTS: { key: SlotName; label: string; accept: string }[] = [
 const edit = new EditHistory();
 const state = {
   file: null as File | null,
+  /** The key the edit is kept under in this browser, while it shows without its recording. */
+  key: null as string | null,
   samples: null as Float32Array | null,
   duration: 0,
   hasPicture: true,
@@ -162,6 +166,8 @@ const state = {
   transcriptName: null as string | null,
   pendingKept: null as Range[] | null,
   model: list('transcriber')[0]?.id ?? '',
+  /** Set once the user picks a model, so a download noticed later never changes their choice. */
+  modelChosen: false,
   exporter: list('exporter')[0]?.id ?? '',
   exportSettings: {} as Record<string, Record<string, string>>,
   slots: { intro: null, outro: null, music: null } as Record<SlotName, Slot | null>,
@@ -180,11 +186,13 @@ const clock = (s: number) => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 };
 const seconds = (s: number) => (s < 60 ? `${s.toFixed(1)} s` : clock(s));
+// to the hundredth of a second, for an edge moved ten milliseconds at a time
+const fine = (s: number) => `${clock(s)}.${String(Math.floor((s % 1) * 100 + 1e-6)).padStart(2, '0')}`;
 const baseName = () => (state.file?.name ?? state.transcriptName ?? 'edit').replace(/\.[^.]+$/, '');
 const transcriptEnd = () => edit.words.at(-1)?.end ?? 0;
 const duration = () => state.duration || transcriptEnd();
 // each edge lands on the quietest instant near it, so a cut never clips a consonant
-const cuts = () => {
+const cuts = (): Cut[] => {
   const raw = cutRanges(edit.words, edit.silences);
   return state.samples ? snapToQuiet(raw, state.samples, RATE) : raw;
 };
@@ -252,6 +260,7 @@ async function job<T>(label: string, run: (progress: Progress, signal: AbortSign
 ui.cancelJob.addEventListener('click', () => state.job?.controller.abort());
 
 // work in progress, or files only this tab holds, are worth a question before the tab closes
+addEventListener('pagehide', () => autosave.flush());
 addEventListener('beforeunload', (e) => {
   if (state.job || exporting || Object.values(state.slots).some((s) => s?.file)) e.preventDefault();
 });
@@ -360,8 +369,9 @@ function changed() {
 }
 
 function autosaveNow() {
-  const key = state.file ? autosave.keyOf(state.file) : state.transcriptName;
+  const key = state.file ? autosave.keyOf(state.file) : (state.key ?? state.transcriptName);
   if (!key || edit.words.length + edit.silences.length === 0) return;
+  autosave.setLast(key);
   autosave.save(
     key,
     { words: edit.words, silences: edit.silences, transcriptName: state.transcriptName, additions: additions() },
@@ -556,27 +566,82 @@ function trim(side: 'before' | 'after') {
   say(`${seconds(range.end - range.start)} ${side === 'before' ? 'before' : 'after'} ${clock(t)} cut. ${undoHint}`);
 }
 ui.cutBefore.addEventListener('click', () => trim('before'));
+
+/**
+ * Puts one edge of a cut at `to`, as a shift on the word or silence the edge
+ * comes from; the edge then stays there rather than moving to the nearest quiet instant.
+ */
+function moveEdge(cut: Cut, side: 'start' | 'end', to: number, key?: string) {
+  const source = side === 'start' ? cut.from : cut.to;
+  const item = source.kind === 'word' ? edit.words[source.index] : edit.silences[source.index];
+  const shift = Math.round((to - item[side]) * 1000) / 1000;
+  edit.change(`move the ${side} of a cut`, () => (item[side === 'start' ? 'startShift' : 'endShift'] = shift), key);
+  changed();
+  say(`${side === 'start' ? 'Start' : 'End'} of the cut moved to ${fine(to)}. ${undoHint}`);
+}
+
+wave.onEdge = ({ cut, side, to }) => {
+  const c = cuts()[cut];
+  if (c) moveEdge(c, side, to);
+};
+
+/** Moves the cut edge nearest the playhead by `step` seconds, and the playhead with it, to listen across the join. */
+function nudgeEdge(step: number) {
+  const t = ui.video.currentTime;
+  let near: { cut: Cut; side: 'start' | 'end'; at: number } | null = null;
+  for (const cut of cuts()) {
+    for (const side of ['start', 'end'] as const) {
+      const at = cut[side];
+      if (at > 0 && at < duration() && (!near || Math.abs(at - t) < Math.abs(near.at - t))) near = { cut, side, at };
+    }
+  }
+  if (!near || Math.abs(near.at - t) > 1) {
+    say('Put the playhead within a second of a cut’s edge, then press [ or ], the two keys right of P, to move that edge.');
+    return;
+  }
+  const { cut, side, at } = near;
+  const to = Math.min(side === 'start' ? cut.end - 0.02 : duration(), Math.max(side === 'start' ? 0 : cut.start + 0.02, at + step));
+  moveEdge(cut, side, to, `${side}:${side === 'start' ? JSON.stringify(cut.from) : JSON.stringify(cut.to)}`);
+  if (state.talkUrl) ui.video.currentTime = to;
+}
 ui.cutAfter.addEventListener('click', () => trim('after'));
 
 // --- transcription -------------------------------------------------------------
 
-ui.model.replaceChildren(
-  ...list('transcriber').map((m) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.setAttribute('role', 'radio');
-    b.dataset.id = m.id;
-    b.textContent = m.label;
-    const small = document.createElement('small');
-    small.textContent = m.downloadMB ? `${m.detail ?? ''}, ${m.downloadMB} MB` : (m.detail ?? '');
-    b.append(small);
-    b.addEventListener('click', () => {
-      state.model = m.id;
-      updateButtons();
-    });
-    return b;
-  }),
-);
+/** The model choices, each with its size or, once in this browser, a mark saying so. */
+function drawModels(have: Set<string> = new Set()) {
+  ui.model.replaceChildren(
+    ...list('transcriber').map((m) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      b.dataset.id = m.id;
+      b.textContent = m.label;
+      const small = document.createElement('small');
+      const size = m.downloadMB >= 1000 ? `${(m.downloadMB / 1000).toFixed(1)} GB` : `${m.downloadMB} MB`;
+      small.textContent = have.has(m.id) ? `${m.detail ?? ''}, downloaded` : m.downloadMB ? `${m.detail ?? ''}, ${size}` : (m.detail ?? '');
+      b.append(small);
+      b.addEventListener('click', () => {
+        state.model = m.id;
+        state.modelChosen = true;
+        updateButtons();
+      });
+      return b;
+    }),
+  );
+  updateButtons();
+}
+
+/** Marks the models already downloaded and, until the user picks one, chooses the first of them. */
+async function checkModels() {
+  const all = list('transcriber');
+  const have = new Set<string>();
+  for (const m of all) if (await m.downloaded?.()) have.add(m.id);
+  if (!state.modelChosen) state.model = all.find((m) => have.has(m.id))?.id ?? state.model;
+  drawModels(have);
+}
+drawModels();
+void checkModels();
 
 /** Arrow keys move the choice in a group of radio buttons, as a screen reader announces them. */
 function radioKeys(group: HTMLElement, choose: (b: HTMLButtonElement) => void) {
@@ -613,6 +678,7 @@ ui.transcribe.addEventListener('click', async (e) => {
   const words = await job(`Transcribing with ${plugin.detail ?? plugin.label}`, (progress, signal) =>
     plugin.transcribe(state.samples!, RATE, { language: ui.language.value || null, progress, signal }),
   );
+  void checkModels();
   if (!words) return;
   edit.reset(words, edit.silences);
   state.transcriptName = `${baseName()}.vtt`;
@@ -623,13 +689,19 @@ ui.transcribe.addEventListener('click', async (e) => {
 
 // --- opening files -------------------------------------------------------------
 
-async function openMedia(file: File) {
+async function openMedia(file: File, link: FileSystemFileHandle | null = null) {
   if (state.job) {
     say(`Wait for “${state.job.label}” to finish, or cancel it first.`);
     return;
   }
+  // an edit made while the recording was not open lands before the recording's own is read
+  autosave.flush();
   player.stop();
   state.file = file;
+  state.key = autosave.keyOf(file);
+  autosave.setLast(state.key);
+  void handles.remember(link);
+  ui.reopen.hidden = true;
   state.samples = null;
   state.duration = 0;
   if (state.talkUrl) URL.revokeObjectURL(state.talkUrl);
@@ -690,6 +762,7 @@ async function openProjectFiles(files: File[]) {
       if (format) {
         edit.reset(format.read(text), edit.silences);
         state.transcriptName = f.name;
+        if (!state.file) state.key = null;
         // an edit made on the transcript alone, on a tablet without the video, comes back too
         const saved = !state.file ? autosave.load(f.name) : null;
         if (saved?.words.length === edit.words.length) {
@@ -713,10 +786,13 @@ async function openProjectFiles(files: File[]) {
   rebuilt();
 }
 
-async function openDropped(files: File[]) {
-  const media = files.find((f) => !isProjectFile(f));
-  if (media) await openMedia(media);
-  const project = files.filter(isProjectFile);
+async function openDropped(dropped: { file: File; link: Promise<FileSystemHandle | null> }[]) {
+  const media = dropped.find((d) => !isProjectFile(d.file));
+  if (media) {
+    const link = await media.link.catch(() => null);
+    await openMedia(media.file, link?.kind === 'file' ? (link as FileSystemFileHandle) : null);
+  }
+  const project = dropped.map((d) => d.file).filter(isProjectFile);
   if (project.length) await openProjectFiles(project);
 }
 
@@ -730,10 +806,22 @@ ui.projectFile.addEventListener('change', () => {
   ui.projectFile.value = '';
   void openProjectFiles(files);
 });
+/** Asks for a recording through the browser's own picker, whose link a reload can use, or through the file input. */
+async function pickMedia() {
+  const choose = handles.picker();
+  if (!choose) return ui.videoFile.click();
+  try {
+    const [link] = await choose({ id: 'media' });
+    void openMedia(await link.getFile(), link);
+  } catch (err) {
+    if (!isAbort(err)) ui.videoFile.click();
+  }
+}
+
 for (const id of ['open-video', 'open-video-big']) {
   $(id).addEventListener('click', () => {
     closeMenus();
-    ui.videoFile.click();
+    void pickMedia();
   });
 }
 $('open-project').addEventListener('click', () => {
@@ -751,7 +839,13 @@ document.addEventListener('dragleave', (e) => {
 document.addEventListener('drop', (e) => {
   e.preventDefault();
   ui.drop.classList.remove('over');
-  void openDropped([...(e.dataTransfer?.files ?? [])]);
+  // the browser hands out a link to a dropped file only during the drop itself
+  type Item = DataTransferItem & { getAsFileSystemHandle?(): Promise<FileSystemHandle | null> };
+  const dropped = [...(e.dataTransfer?.items ?? [])]
+    .filter((i) => i.kind === 'file')
+    .map((i) => ({ file: i.getAsFile()!, link: (i as Item).getAsFileSystemHandle?.() ?? Promise.resolve(null) }))
+    .filter((d) => d.file);
+  void openDropped(dropped);
 });
 
 // --- saving --------------------------------------------------------------------
@@ -1191,6 +1285,10 @@ document.addEventListener('keydown', (e) => {
     else ui.video.currentTime = back;
   } else if ((key === ',' || key === '.') && !player.playing && state.talkUrl) {
     ui.video.currentTime = Math.max(0, ui.video.currentTime + (key === '.' ? FRAME : -FRAME));
+  } else if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+    // by the key's place, the two right of P, so a French keyboard needs no AltGr
+    e.preventDefault();
+    nudgeEdge(e.code === 'BracketLeft' ? -0.01 : 0.01);
   } else if (e.key === '?') {
     ui.helpDialog.showModal();
   }
@@ -1225,6 +1323,48 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 // the model and the engines are large; asking the browser to keep them spares a second download offline
 void navigator.storage?.persist?.().catch(() => {});
 
+// --- the last project, back after a reload ---------------------------------------
+
+/**
+ * Opens the project open when the page closed: the recording itself when the
+ * browser still lets the page read it, the transcript and its strikes otherwise,
+ * with a button to open the recording again.
+ */
+async function restoreLast() {
+  const key = autosave.last();
+  if (!key) return;
+  const name = autosave.nameOf(key);
+  const media = autosave.isMedia(key);
+  const stored = media ? await handles.recall() : null;
+  const link = stored?.name === name ? stored : null;
+  const file = link && (await handles.read(link, false));
+  // a file the user opened while the browser looked for the last one wins
+  const opened = () => !!state.file || !!state.job || edit.words.length > 0;
+  if (opened()) return;
+  if (file && autosave.keyOf(file) === key) return openMedia(file, link);
+  const saved = autosave.load(key);
+  if (saved?.words.length) {
+    edit.reset(saved.words, saved.silences);
+    state.key = key;
+    state.transcriptName = saved.transcriptName;
+    if (saved.additions) applyAdditions(saved.additions);
+    rebuilt();
+  }
+  if (!media) {
+    if (saved?.words.length) say(`Your last edit of ${name} is back.`);
+    return;
+  }
+  ui.reopen.textContent = `Open ${name} again`;
+  ui.reopen.hidden = false;
+  ui.reopen.onclick = async () => {
+    const again = link && (await handles.read(link, true));
+    if (again) void openMedia(again, link);
+    else void pickMedia();
+  };
+  say(saved?.words.length ? `Your last edit of ${name} is back; open the recording again to play and export it.` : `${name} was open last.`);
+}
+
 drawIcons();
 drawSlots();
 rebuilt();
+void restoreLast();

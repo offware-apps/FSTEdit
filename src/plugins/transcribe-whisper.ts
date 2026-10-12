@@ -55,14 +55,59 @@ export function runWhisper(
   });
 }
 
+// where transformers.js keeps what it downloads, each file under the address it came from
+const CACHE = 'transformers-cache';
+
+/** Whether every file of one of the sets of `model` files is stored. */
+async function stored(model: string, sets: string[][]): Promise<boolean> {
+  try {
+    if (!(await caches.has(CACHE))) return false;
+    const cache = await caches.open(CACHE);
+    const has = async (f: string) => !!(await cache.match(`https://huggingface.co/${model}/resolve/main/onnx/${f}`));
+    for (const set of sets) if ((await Promise.all(set.map(has))).every(Boolean)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /** Whisper running in a worker through transformers.js, downloaded once from Hugging Face; one plugin per model. */
 export function whisper(id: string, label: string, detail: string, downloadMB: number): TranscriberPlugin {
+  let have = false;
   return {
     id,
     label,
     detail,
     downloadMB,
-    note: () => `${detail}: downloads ${downloadMB} MB the first time, then works offline.`,
+    note: () => (have ? `${detail}: already in this browser, works offline.` : `${detail}: downloads ${downloadMB} MB the first time, then works offline.`),
+    downloaded: async () => (have = await stored(id, [['encoder_model_q4.onnx', 'decoder_model_merged_q4.onnx']])),
     transcribe: (samples, rate, options) => runWhisper({ model: id }, samples, rate, detail, options),
+  };
+}
+
+/**
+ * Mistral's Voxtral Mini 4B Realtime, on the graphics chip through WebGPU:
+ * half precision where the chip has it, else 4-bit with full-precision sums.
+ */
+export function voxtral(id: string, label: string, detail: string, downloadMB: number): TranscriberPlugin {
+  let have = false;
+  const size = `${(downloadMB / 1000).toFixed(1)} GB`;
+  return {
+    id,
+    label,
+    detail,
+    downloadMB,
+    note: () =>
+      !('gpu' in navigator)
+        ? `${detail} needs WebGPU, which this browser does not offer; Chrome or Edge on a computer with a graphics chip has it.`
+        : have
+          ? `${detail}: already in this browser, runs on the graphics chip, works offline.`
+          : `${detail}: downloads ${size} the first time, runs on the graphics chip, then works offline.`,
+    downloaded: async () =>
+      (have = await stored(id, [
+        ['audio_encoder_q4f16.onnx_data', 'decoder_model_merged_q4f16.onnx_data', 'embed_tokens_q4f16.onnx_data'],
+        ['audio_encoder_q4.onnx_data', 'decoder_model_merged_q4.onnx_data_1', 'embed_tokens_q4.onnx_data'],
+      ])),
+    transcribe: (samples, rate, options) => runWhisper({ model: id, engine: 'voxtral' }, samples, rate, detail, options),
   };
 }

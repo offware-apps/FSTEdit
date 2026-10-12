@@ -495,6 +495,19 @@
     background: var(--accent);
     box-shadow: 0 0 0 1px var(--app);
   }
+  /* a handle on each edge of a cut, above the range input so a drag moves the edge rather than the playhead */
+  .cut-edge {
+    @apply absolute top-0 bottom-0 z-10 w-3 -translate-x-1/2 cursor-ew-resize;
+    touch-action: none;
+  }
+  .cut-edge::after {
+    content: '';
+    @apply absolute top-0 bottom-0 left-1/2 w-0.5 -translate-x-1/2 opacity-60;
+    background: var(--cut);
+  }
+  .cut-edge:hover::after {
+    @apply w-1 opacity-100;
+  }
   /* the range input lies over the drawing, so the mouse, the finger and the keyboard all seek */
   .seek {
     @apply absolute inset-0 m-0 size-full cursor-pointer opacity-0;

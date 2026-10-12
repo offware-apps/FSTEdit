@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fillerIndexes, isFiller } from '../src/lib/fillers';
 import { EditHistory } from '../src/lib/history';
+import { cutRanges } from '../src/lib/cuts';
 import { snapToQuiet } from '../src/lib/silence';
 import { editedWords } from '../src/lib/subtitles';
 
@@ -52,16 +53,38 @@ describe('EditHistory', () => {
 });
 
 describe('snapToQuiet', () => {
-  it('moves an edge onto the gap between two sounds', () => {
-    const rate = 1000;
-    const s = new Float32Array(1000).map((_, i) => (i >= 480 && i < 500 ? 0 : Math.sin(i)));
-    const [r] = snapToQuiet([{ start: 0.47, end: 0.8 }], s, rate, 0.04);
-    expect(r.start).toBeGreaterThanOrEqual(0.48);
-    expect(r.start).toBeLessThanOrEqual(0.5);
+  const rate = 16000;
+  // three voiced words, a beat every 10 ms dying out over 4 ms, over room noise, with gaps at 1.0 to 1.06 s and 1.5 to 1.6 s
+  const voice = () => {
+    const s = new Float32Array(rate * 2.2).map((_, i) => 0.001 * Math.sin(i * 1.7));
+    for (const [a, b] of [[0.5, 1.0], [1.06, 1.5], [1.6, 2.0]]) {
+      for (let i = Math.round(a * rate); i < b * rate; i++) {
+        s[i] += 0.5 * Math.exp(-((i / rate) % 0.01) / 0.004) * Math.sin(2 * Math.PI * 500 * (i / rate));
+      }
+    }
+    return s;
+  };
+  // Whisper's times for the middle word, 80 ms late at its start and 20 ms early at its end
+  const words = (shift?: number) => [
+    { text: 'recording.', start: 0.5, end: 1.0, cut: false },
+    { text: 'Are', start: 1.14, end: 1.48, cut: true, startShift: shift },
+    { text: 'next', start: 1.6, end: 2.0, cut: false },
+  ];
+
+  it('moves a late edge back into the gap before the word, and an early one past its end', () => {
+    const [r] = snapToQuiet(cutRanges(words(), []), voice(), rate);
+    expect(r.start).toBeGreaterThanOrEqual(1.0);
+    expect(r.start).toBeLessThanOrEqual(1.06);
+    expect(r.end).toBeGreaterThanOrEqual(1.5);
+    expect(r.end).toBeLessThanOrEqual(1.6);
+  });
+  it('leaves an edge the user moved where they put it', () => {
+    const [r] = snapToQuiet(cutRanges(words(0.01), []), voice(), rate);
+    expect(r.start).toBeCloseTo(1.15, 6);
   });
   it('leaves an edge alone in silence', () => {
-    const s = new Float32Array(1000);
-    expect(snapToQuiet([{ start: 0.3, end: 0.6 }], s, 1000)).toEqual([{ start: 0.3, end: 0.6 }]);
+    const [r] = snapToQuiet(cutRanges(words(), []), new Float32Array(rate * 2.2), rate);
+    expect([r.start, r.end]).toEqual([1.14, 1.48]);
   });
 });
 

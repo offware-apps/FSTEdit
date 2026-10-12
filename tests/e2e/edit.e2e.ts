@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 const fixture = (name: string) => new URL(`../fixtures/${name}`, import.meta.url).pathname;
 
@@ -184,4 +185,104 @@ test('a model folder without the model says what it lacks, and downloads nothing
   await (await chooser).setFiles(dir);
   await expect(page.locator('#status')).toContainText('Your folder: the folder has no encoder_model and decoder_model_merged ONNX pair');
   expect(outside).toEqual([]);
+});
+
+test('moves a cut edge by dragging it and by the keys, and undoes the key presses as one', async ({ page }) => {
+  await openTalk(page);
+  await page.locator('#tab-clean').click();
+  await page.locator('#cut-fillers').click();
+  const edges = page.locator('.cut-edge');
+  await expect(edges).toHaveCount(2);
+  const before = await page.locator('#edit-summary').textContent();
+
+  // the end of the cut on "Um," dragged later, over the pause before "so,"
+  const box = (await edges.nth(1).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.locator('#status')).toContainText('End of the cut moved to 0:06.');
+  await expect(page.locator('#edit-summary')).not.toHaveText(before!);
+
+  // the playhead at the start of the cut, then three presses of ] move that edge 30 ms later
+  await page.locator('#seek').evaluate((el: HTMLInputElement) => {
+    el.value = '57';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  for (let i = 0; i < 3; i++) await page.keyboard.press('BracketRight');
+  const moved = (await page.locator('#status').textContent())!;
+  expect(moved).toMatch(/^Start of the cut moved to 0:05\.\d\d/);
+
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('#status')).toHaveText('Undid move the start of a cut.');
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('#status')).toHaveText('Undid move the end of a cut.');
+  await expect(page.locator('#edit-summary')).toHaveText(before!);
+});
+
+test('a reload shows the last project again, and a browser without file links asks for the recording once', async ({ page }) => {
+  // as in Firefox and Safari, which give no lasting link to a file
+  await page.addInitScript(() => Object.defineProperty(window, 'showOpenFilePicker', { value: undefined }));
+  await openTalk(page);
+  await page.locator('#tab-clean').click();
+  await page.locator('#cut-fillers').click();
+  // no wait: closing the page writes the edit at once
+  await page.reload();
+  await expect(page.locator('#transcript .w')).toHaveCount(25);
+  await expect(page.locator('#transcript .cut')).toHaveText(['Um,']);
+  await expect(page.locator('#status')).toHaveText('Your last edit of talk.mp4 is back; open the recording again to play and export it.');
+
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('#reopen').click();
+  await (await chooser).setFiles(fixture('talk.mp4'));
+  await expect(page.locator('#status')).toContainText('Restored your last edit of talk.mp4');
+  await expect(page.locator('#reopen')).toBeHidden();
+  await expect(page.locator('#transcript .cut')).toHaveText(['Um,']);
+});
+
+test('a reload opens the recording again by itself where the browser keeps the link', async ({ page }) => {
+  const bytes = readFileSync(fixture('talk.mp4')).toString('base64');
+  // the browser's picker answers with a file in the page's own storage, a link the page may always read
+  await page.addInitScript((b64) => {
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      value: async () => {
+        const dir = await navigator.storage.getDirectory();
+        const link = await dir.getFileHandle('talk.mp4', { create: true });
+        const w = await link.createWritable();
+        await w.write(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+        await w.close();
+        return [link];
+      },
+    });
+  }, bytes);
+  await page.goto('/');
+  await page.locator('#open-video-big').click();
+  await expect(page.locator('#status')).toContainText('talk.mp4 is open');
+  await page.locator('#project-file').setInputFiles(fixture('talk.vtt'));
+  await page.locator('#tab-clean').click();
+  await page.locator('#cut-fillers').click();
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('Restored your last edit of talk.mp4');
+  await expect(page.locator('#transcript .cut')).toHaveText(['Um,']);
+  await expect(page.locator('#reopen')).toBeHidden();
+  await expect(page.locator('#play')).toBeEnabled();
+});
+
+test('marks a model already downloaded, and chooses it until the user picks another', async ({ page }) => {
+  await page.goto('/');
+  // the turbo model's two files, stored where transformers.js keeps what it downloads
+  await page.evaluate(async () => {
+    const cache = await caches.open('transformers-cache');
+    for (const f of ['encoder_model', 'decoder_model_merged']) {
+      await cache.put(`https://huggingface.co/onnx-community/whisper-large-v3-turbo_timestamped/resolve/main/onnx/${f}_q4.onnx`, new Response('x'));
+    }
+  });
+  await page.reload();
+  await page.locator('#video-file').setInputFiles(fixture('talk.mp4'));
+  await expect(page.locator('#status')).toContainText('is open');
+  const best = page.locator('#model button', { hasText: 'Best' });
+  await expect(best).toContainText('Whisper turbo, downloaded');
+  await expect(best).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('#model button', { hasText: 'Light' })).toContainText('142 MB');
+  await expect(page.locator('#transcribe-note')).toHaveText('Whisper turbo: already in this browser, works offline.');
 });

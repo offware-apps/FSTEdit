@@ -37,9 +37,11 @@ and once the model is downloaded FSTEdit works offline.
 
 ## What it does
 
-- **Transcribe** the talk with Whisper, a time on every word. Light is a
-  142 MB download, Best is 759 MB, and Your folder loads a model already on your
-  disk; all run on your device and show the time left.
+- **Transcribe** the talk, a time on every word. Light is Whisper base, a
+  142 MB download; Best is Whisper turbo, 759 MB; Voxtral is Mistral's Voxtral
+  Mini, about 2.8 GB, on the graphics chip through WebGPU; and Your folder
+  loads a Whisper model already on your disk. All run on your device, show the
+  time left, and say which models this browser already holds.
 - **Strike** words by clicking, dragging, tapping or with the keyboard. Every
   filler word, "um", "uh", "euh", "ben", goes in one click, or one at a time
   after a look at each.
@@ -49,13 +51,20 @@ and once the model is downloaded FSTEdit works offline.
 - **Add an intro, an outro and music.** The music repeats, fades at both ends
   and drops while someone speaks.
 - **Play the edit** with all of it before anything is rendered.
-- **Undo and redo** everything, and find your edit again after a reload.
+- **Move a cut's edge** by dragging it on the timeline, or 10 ms at a time
+  with <kbd>[</kbd> and <kbd>]</kbd>, when the transcript placed a word a
+  little off.
+- **Undo and redo** everything. A reload opens the last project again: its
+  transcript and strikes at once, and its recording too where the browser
+  keeps a link to the file, Chrome and Edge, or after one click elsewhere.
 - **Export** an MP4 for YouTube or PeerTube, an M4A or MP3 for a podcast feed,
   or an animated GIF.
 - **Save** the project, the transcript, or subtitles timed to the edited video.
 
-Each cut fades the sound over 5 ms and lands on the quietest instant within
-40 ms of the word's edge, so a join neither clicks nor clips a consonant.
+Each cut fades the sound over 5 ms. Its edges land on the quietest 20 ms
+within 150 ms of the word's edge and at most 40 ms into the word beside it,
+so a join neither clicks nor clips a consonant when the transcript misplaces
+a word.
 
 ## Formats
 
@@ -91,6 +100,7 @@ one precision. FSTEdit then requests nothing from any server.
 | --- | --- |
 | <kbd>Space</kbd> | Play or stop the edit from the selection |
 | <kbd>X</kbd>, <kbd>Delete</kbd> | Strike or restore the selected words |
+| <kbd>[</kbd> <kbd>]</kbd> | Move the cut edge nearest the playhead 10 ms earlier or later; the two keys right of <kbd>P</kbd> on any layout |
 | <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> | Back 5 s, stop, play faster |
 | <kbd>,</kbd> <kbd>.</kbd> | One frame back or forward |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo; with <kbd>Shift</kbd>, redo |
@@ -111,7 +121,7 @@ under the same contract to replace or add one.
 | Kind | Built in | Contract |
 | --- | --- | --- |
 | `media` | the browser's decoders, then ffmpeg.wasm for every other format | `decodeAudio`, `playable`, tried in order |
-| `transcriber` | Whisper base and turbo through [transformers.js](https://github.com/huggingface/transformers.js), or any Whisper export in a folder you pick | `transcribe(samples, rate, options)` to timed words; `prepare` to ask the user for what it needs |
+| `transcriber` | Whisper base and turbo, and Voxtral Mini 4B Realtime, through [transformers.js](https://github.com/huggingface/transformers.js), or any Whisper export in a folder you pick | `transcribe(samples, rate, options)` to timed words; `prepare` to ask the user for what it needs |
 | `silence` | a loudness threshold | `find(samples, rate, options)` to ranges |
 | `exporter` | MP4, M4A, MP3 and GIF through [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm) | `export(job, progress, signal)` to a file, with its own options |
 | `transcript` | WebVTT, SRT | `read(text)` and `write(words)` |

@@ -3,6 +3,7 @@ import type { Additions } from '../lib/otio';
 
 const PREFIX = 'fstedit:';
 const INDEX = 'fstedit-index';
+const LAST = 'fstedit-last';
 const VERSION = 2;
 // a one-hour transcript takes about a sixth of the storage a browser gives a site, so a few edits are kept
 const KEEP = 4;
@@ -17,6 +18,30 @@ export type Saved = {
 
 /** The key for one recording; the name, size and date together tell one file from another without reading it. */
 export const keyOf = (f: File) => `${f.name}:${f.size}:${f.lastModified}`;
+
+/** The file a key names: a recording's name, or the transcript's for an edit made without the recording. */
+export const nameOf = (key: string) => key.replace(/:\d+:\d+$/, '');
+
+/** Whether a key names a recording rather than a transcript opened alone. */
+export const isMedia = (key: string) => /:\d+:\d+$/.test(key);
+
+/** The key of the project open when the page last closed, or null. */
+export function last(): string | null {
+  try {
+    return localStorage.getItem(LAST);
+  } catch {
+    return null;
+  }
+}
+
+/** Marks the project now open as the one a reload brings back. */
+export function setLast(key: string) {
+  try {
+    localStorage.setItem(LAST, key);
+  } catch {
+    // a full storage keeps the previous mark
+  }
+}
 
 function index(): string[] {
   try {
@@ -40,6 +65,14 @@ export function load(key: string): Saved | null {
 }
 
 let pending = 0;
+let write: (() => void) | null = null;
+
+/** Writes a change still waiting its half second, before the page closes or another file opens. */
+export function flush() {
+  clearTimeout(pending);
+  write?.();
+  write = null;
+}
 
 /**
  * Keeps the edit in this browser, half a second after the last change. The
@@ -47,7 +80,8 @@ let pending = 0;
  */
 export function save(key: string, data: Saved, failed: (why: string) => void) {
   clearTimeout(pending);
-  pending = window.setTimeout(() => {
+  write = () => {
+    write = null;
     const text = JSON.stringify({ v: VERSION, ...data });
     let keys = [key, ...index().filter((k) => k !== key)];
     for (;;) {
@@ -65,5 +99,6 @@ export function save(key: string, data: Saved, failed: (why: string) => void) {
         localStorage.removeItem(PREFIX + keys.pop()!);
       }
     }
-  }, 500);
+  };
+  pending = window.setTimeout(() => write?.(), 500);
 }

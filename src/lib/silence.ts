@@ -1,4 +1,4 @@
-import type { Range } from './cuts';
+import type { Cut, Range } from './cuts';
 
 export type SilenceOptions = {
   /** Loudness under which a window counts as quiet, in dBFS. */
@@ -42,20 +42,27 @@ export function findSilences(
 }
 
 /**
- * Moves each edge of each range to the quietest instant within `window`
- * seconds of it, so a cut lands in the gap between two words rather than on
- * the consonant a word timestamp misplaced by a few milliseconds.
+ * Moves each edge of each cut to the quietest instant inside its `snap` span,
+ * so the cut lands in the gap between two words rather than on the sound a
+ * word time misplaced. Loudness is taken over 20 ms, longer than one beat of a
+ * speaking voice, so the quiet between two beats inside a word never wins.
  */
-export function snapToQuiet(ranges: Range[], samples: Float32Array, rate: number, window = 0.04): Range[] {
+export function snapToQuiet<T extends Cut>(cuts: T[], samples: Float32Array, rate: number): T[] {
+  const half = Math.round(rate * 0.01);
   const hop = Math.max(1, Math.round(rate * 0.002));
-  const span = Math.round(window * rate);
-  const quietest = (t: number) => {
+  const quietest = (t: number, [lo, hi]: [number, number]) => {
+    const from = Math.max(half, Math.round(lo * rate));
+    const to = Math.min(samples.length - half, Math.round(hi * rate));
+    if (from > to) return t;
+    // a running sum of squares, so each step of the search costs two samples
+    let e = 0;
+    for (let i = from - half; i < from + half; i++) e += samples[i] * samples[i];
     const centre = Math.round(t * rate);
     let best = centre;
     let bestEnergy = Infinity;
-    for (let c = Math.max(hop, centre - span); c <= Math.min(samples.length - hop, centre + span); c += hop) {
-      let e = 0;
-      for (let i = c - hop; i < c + hop; i++) e += samples[i] * samples[i];
+    for (let c = from; c <= to; c++) {
+      if (c > from) e += samples[c + half - 1] ** 2 - samples[c - half - 1] ** 2;
+      if ((c - from) % hop) continue;
       // ties keep the nearest instant, so silence leaves the edge where it was
       if (e < bestEnergy - 1e-9 || (Math.abs(e - bestEnergy) <= 1e-9 && Math.abs(c - centre) < Math.abs(best - centre))) {
         bestEnergy = e;
@@ -64,9 +71,9 @@ export function snapToQuiet(ranges: Range[], samples: Float32Array, rate: number
     }
     return best / rate;
   };
-  return ranges.map((r) => {
-    const start = r.start <= 0 ? 0 : quietest(r.start);
-    const end = r.end * rate >= samples.length ? r.end : quietest(r.end);
-    return end > start ? { start, end } : r;
+  return cuts.map((r) => {
+    const start = r.snap.start && r.start > 0 ? quietest(r.start, r.snap.start) : r.start;
+    const end = r.snap.end && r.end * rate < samples.length ? quietest(r.end, r.snap.end) : r.end;
+    return end > start ? { ...r, start, end } : r;
   });
 }
