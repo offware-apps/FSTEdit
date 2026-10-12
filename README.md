@@ -18,9 +18,14 @@ and once the model is downloaded FSTEdit works offline.
 
 ## See it
 
+> Transcribing from a Whisper model in a folder on the disk, so nothing is
+> downloaded, then striking the "Um,". Recorded in headless Chromium by
+> [`scripts/record-demo.mjs`](scripts/record-demo.mjs).
+
+![Transcribing with a model from a local folder in FSTEdit](docs/media/transcribe.gif)
+
 > Striking words and silences: a drag across "Um, so," struck with one key,
-> the silences found and struck, then undone and redone. Recorded in headless
-> Chromium by [`scripts/record-demo.mjs`](scripts/record-demo.mjs).
+> the silences found and struck, then undone and redone. Same recorder.
 
 ![Striking words and silences in FSTEdit](docs/media/edit.gif)
 
@@ -135,8 +140,8 @@ npm test
 npm run test:e2e
 # 5. build the static site into dist/
 npm run build
-# 6. record the demo GIFs again, with `npx vite --port 5174` running
-node scripts/record-demo.mjs
+# 6. record the demo GIFs again, with `npx vite --port 5174` running; MODEL_DIR adds the transcription
+MODEL_DIR=path/to/whisper-base_timestamped node scripts/record-demo.mjs
 ```
 
 Every push to `main` deploys to GitHub Pages through

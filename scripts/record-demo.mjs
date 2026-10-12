@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Records the README's demo GIFs: drives the app in headless Chromium, then
 // turns each recording into a GIF with ffmpeg. Needs `npm run dev -- --port 5174` running.
+// MODEL_DIR, a folder holding a Whisper ONNX export, adds the transcription scene.
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
@@ -61,6 +62,32 @@ async function openTalk(page) {
 }
 
 mkdirSync(out, { recursive: true });
+
+if (process.env.MODEL_DIR) {
+  await scene('transcribe', async (page) => {
+    await page.waitForTimeout(500);
+    await page.locator('#video-file').setInputFiles(fixture('talk.mp4'));
+    await page.locator('#status').filter({ hasText: 'is open' }).waitFor();
+    await page.waitForTimeout(600);
+    await move(page, page.locator('#model button', { hasText: 'Your folder' }));
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(900);
+    await page.locator('#language').selectOption('en');
+    const chooser = page.waitForEvent('filechooser');
+    await move(page, page.locator('#transcribe'));
+    await page.mouse.down();
+    await page.mouse.up();
+    await (await chooser).setFiles(process.env.MODEL_DIR);
+    await page.locator('#status').filter({ hasText: 'transcribed' }).waitFor({ timeout: 120_000 });
+    await page.waitForTimeout(1500);
+    await move(page, page.locator('#transcript .w', { hasText: /^Um,$/ }));
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.keyboard.press('x');
+    await page.waitForTimeout(1500);
+  });
+}
 
 await scene('edit', async (page) => {
   await page.waitForTimeout(700);
