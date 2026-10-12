@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Edit a talk by its transcript, on your own device." />
+    <meta name="color-scheme" content="dark light" />
+    <title>FSTEdit</title>
+  </head>
+  <body class="app">
+    <header class="topbar">
+      <div class="flex min-w-0 items-center gap-2.5">
+        <span class="logo" aria-hidden="true"><i data-lucide="scissors"></i></span>
+        <span class="font-display text-[15px] font-semibold tracking-tight">FSTEdit</span>
+        <span id="file-name" class="file-pill" hidden></span>
+      </div>
+
+      <div class="when-open flex items-center gap-1" role="group" aria-label="History">
+        <button id="undo" type="button" class="btn-icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><i data-lucide="undo-2"></i></button>
+        <button id="redo" type="button" class="btn-icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><i data-lucide="redo-2"></i></button>
+      </div>
+
+      <nav class="flex items-center gap-1.5" aria-label="Project">
+        <details class="menu" id="open-menu">
+          <summary class="btn-ghost"><i data-lucide="folder-open"></i><span class="max-sm:hidden">Open</span></summary>
+          <div class="menu-list">
+            <button id="open-video" type="button"><i data-lucide="file-play"></i>Video or audio…</button>
+            <button id="open-project" type="button"><i data-lucide="file-text"></i>Transcript or project…</button>
+          </div>
+        </details>
+        <details class="menu when-open" id="save-menu">
+          <summary class="btn-ghost"><i data-lucide="save"></i><span class="max-sm:hidden">Save</span></summary>
+          <div class="menu-list" id="save-list"></div>
+        </details>
+        <button id="export" type="button" class="btn-primary when-open" disabled><i data-lucide="upload"></i>Export</button>
+        <button id="help" type="button" class="btn-icon" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts and settings"><i data-lucide="keyboard"></i></button>
+      </nav>
+      <input id="video-file" type="file" hidden />
+      <input id="project-file" type="file" accept=".vtt,.srt,.otio" multiple hidden />
+    </header>
+
+    <main class="stage">
+      <section id="empty" class="empty" aria-labelledby="empty-h">
+        <div class="drop" id="drop">
+          <div class="drop-icon" aria-hidden="true"><i data-lucide="clapperboard"></i></div>
+          <h1 id="empty-h" class="font-display text-3xl font-semibold tracking-tight">Edit a talk by its words</h1>
+          <p class="mx-auto max-w-md text-muted">Strike a word in the transcript and the video loses it. Transcription and export run on this device; your video never leaves it.</p>
+          <button id="open-video-big" type="button" class="btn-primary btn-lg"><i data-lucide="file-play"></i>Open a video</button>
+          <p class="text-sm text-muted">or drop it here, with its <code>.vtt</code>, <code>.srt</code> or <code>.otio</code></p>
+          <ul class="formats-hint" aria-label="Formats that open">
+            <li>MP4</li><li>MOV</li><li>MKV</li><li>WebM</li><li>AVI</li><li>MP3</li><li>WAV</li><li>FLAC</li><li>and more</li>
+          </ul>
+        </div>
+      </section>
+
+      <div id="workspace" class="workspace" hidden>
+        <nav class="rail" role="tablist" aria-label="Tools" aria-orientation="vertical">
+          <button role="tab" type="button" id="tab-transcribe" aria-controls="panel-transcribe" aria-selected="true" title="Transcribe">
+            <i data-lucide="captions"></i><span>Transcribe</span>
+          </button>
+          <button role="tab" type="button" id="tab-clean" aria-controls="panel-clean" aria-selected="false" tabindex="-1" title="Clean up">
+            <i data-lucide="wand-sparkles"></i><span>Clean up</span>
+          </button>
+          <button role="tab" type="button" id="tab-extras" aria-controls="panel-extras" aria-selected="false" tabindex="-1" title="Intro and music">
+            <i data-lucide="music"></i><span>Intro &amp; music</span>
+          </button>
+        </nav>
+
+        <aside class="panel" aria-label="Tool settings">
+          <div role="tabpanel" id="panel-transcribe" aria-labelledby="tab-transcribe" class="panel-body">
+            <h2 class="panel-title">Transcribe</h2>
+            <p class="text-sm text-muted">Turns the speech into words you can strike. It runs on this device.</p>
+            <div class="field">
+              <span class="label" id="model-label">Model</span>
+              <div class="segmented" id="model" role="radiogroup" aria-labelledby="model-label"></div>
+            </div>
+            <div class="field">
+              <label class="label" for="language">Language</label>
+              <select id="language" class="input">
+                <option value="">Detect it</option>
+                <option value="en">English</option>
+                <option value="fr">French</option>
+                <option value="es">Spanish</option>
+                <option value="de">German</option>
+              </select>
+            </div>
+            <button id="transcribe" type="button" class="btn-primary w-full" disabled><i data-lucide="audio-lines"></i>Transcribe</button>
+            <p class="text-xs text-muted" id="transcribe-note"></p>
+          </div>
+
+          <div role="tabpanel" id="panel-clean" aria-labelledby="tab-clean" class="panel-body" hidden>
+            <h2 class="panel-title">Clean up</h2>
+            <div class="tool">
+              <div class="tool-head">
+                <span class="tool-icon"><i data-lucide="message-circle-off"></i></span>
+                <div class="min-w-0">
+                  <strong>Filler words</strong>
+                  <p class="text-xs text-muted" id="filler-note">Um, uh, euh and the like.</p>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button id="next-filler" type="button" class="btn-ghost flex-1" disabled><i data-lucide="search"></i>Show next</button>
+                <button id="cut-fillers" type="button" class="btn-ghost flex-1" disabled><i data-lucide="scissors"></i>Strike all</button>
+              </div>
+            </div>
+            <div class="tool">
+              <div class="tool-head">
+                <span class="tool-icon"><i data-lucide="pause"></i></span>
+                <div class="min-w-0">
+                  <strong>Silences</strong>
+                  <p class="text-xs text-muted" id="silence-note">Pauses longer than you set below.</p>
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" for="threshold">Quieter than <output id="threshold-out"></output></label>
+                <input id="threshold" type="range" min="-60" max="-20" step="1" value="-40" />
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="field">
+                  <label class="label" for="min-silence">Longer than, s</label>
+                  <input id="min-silence" class="input" type="number" value="0.6" step="0.1" min="0.1" />
+                </div>
+                <div class="field">
+                  <label class="label" for="margin">Breath kept, s</label>
+                  <input id="margin" class="input" type="number" value="0.1" step="0.05" min="0" />
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button id="find-silences" type="button" class="btn-ghost flex-1" disabled><i data-lucide="search"></i>Find</button>
+                <button id="cut-silences" type="button" class="btn-ghost flex-1" disabled><i data-lucide="scissors"></i>Strike all</button>
+              </div>
+            </div>
+            <div class="tool">
+              <div class="tool-head">
+                <span class="tool-icon"><i data-lucide="between-vertical-start"></i></span>
+                <div class="min-w-0">
+                  <strong>Start and end</strong>
+                  <p class="text-xs text-muted">Drop the setup before the talk and the chatter after it, at the playhead.</p>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button id="cut-before" type="button" class="btn-ghost flex-1" disabled><i data-lucide="arrow-left-to-line"></i>Cut before</button>
+                <button id="cut-after" type="button" class="btn-ghost flex-1" disabled><i data-lucide="arrow-right-to-line"></i>Cut after</button>
+              </div>
+            </div>
+          </div>
+
+          <div role="tabpanel" id="panel-extras" aria-labelledby="tab-extras" class="panel-body" hidden>
+            <h2 class="panel-title">Intro &amp; music</h2>
+            <ul id="slots" class="slots"></ul>
+            <div id="music-options" class="tool" hidden>
+              <div class="field">
+                <label class="label" for="music-volume">Music under the talk <output id="music-volume-out"></output></label>
+                <input id="music-volume" type="range" min="0" max="50" step="1" value="15" />
+              </div>
+              <div class="field">
+                <label class="label" for="fade">Fade in and out, s</label>
+                <input id="fade" class="input" type="number" value="1" step="0.5" min="0" max="10" />
+              </div>
+              <label class="check"><input id="loop" type="checkbox" checked /> Repeat it until the end</label>
+              <label class="check"><input id="duck" type="checkbox" checked /> Lower it while someone speaks</label>
+            </div>
+            <input id="slot-file" type="file" hidden />
+          </div>
+        </aside>
+
+        <section class="script" aria-labelledby="edit-h">
+          <div class="script-scroll" id="script-scroll">
+            <div class="script-page">
+              <header class="script-head">
+                <h2 id="edit-h" class="font-display text-lg font-semibold tracking-tight">Transcript</h2>
+                <span id="edit-summary" class="cut-badge"></span>
+              </header>
+              <div id="transcript" class="transcript" role="listbox" aria-multiselectable="true" aria-label="Transcript words" tabindex="0"></div>
+              <div id="transcript-empty" class="placeholder">
+                <i data-lucide="captions"></i>
+                <p>No transcript yet.</p>
+                <p class="text-sm text-muted">Transcribe the video from the panel on the left, or open its <code>.vtt</code> or <code>.srt</code>.</p>
+              </div>
+            </div>
+          </div>
+          <div id="selection-tools" class="float-bar" role="toolbar" aria-label="Selection" hidden>
+            <span id="selection-info" class="px-2 text-xs text-muted"></span>
+            <button id="strike" type="button" class="btn-bar" disabled><i data-lucide="scissors"></i>Strike<kbd>X</kbd></button>
+            <button id="restore" type="button" class="btn-bar" disabled><i data-lucide="rotate-ccw"></i>Restore</button>
+            <button id="play-here" type="button" class="btn-bar" disabled><i data-lucide="play"></i>Play</button>
+          </div>
+        </section>
+
+        <aside class="preview" aria-label="Video">
+          <div class="screen"><video id="video" preload="auto" playsinline></video></div>
+          <div class="transport">
+            <button id="play" type="button" class="play-btn" disabled aria-label="Play the edit" data-playing="false">
+              <i data-lucide="play" class="when-paused"></i><i data-lucide="pause" class="when-playing"></i>
+            </button>
+            <div class="flex min-w-0 flex-col">
+              <span id="clock" class="clock">0:00 / 0:00</span>
+              <span class="text-[11px] text-muted">The edit, with intro and outro</span>
+            </div>
+          </div>
+          <label class="check px-1 text-xs text-muted"><input id="show-video" type="checkbox" checked /> Show the picture</label>
+        </aside>
+      </div>
+    </main>
+
+    <section id="timeline" class="timeline" aria-label="Timeline" hidden>
+      <div class="ruler" id="ruler" aria-hidden="true"></div>
+      <div class="track">
+        <canvas id="wave" aria-hidden="true"></canvas>
+        <div id="playhead" class="playhead" aria-hidden="true"></div>
+        <input id="seek" class="seek" type="range" min="0" max="1000" value="0" aria-label="Position in the talk" />
+      </div>
+    </section>
+
+    <footer class="statusbar">
+      <p id="status" role="status" aria-live="polite"></p>
+      <progress id="progress" max="1" aria-label="Progress of the current job" hidden></progress>
+      <button id="cancel-job" type="button" class="btn-link" hidden>Cancel</button>
+    </footer>
+
+    <dialog id="export-dialog" aria-labelledby="export-h">
+      <form method="dialog" class="dialog">
+        <div class="flex items-center gap-3">
+          <span class="tool-icon"><i data-lucide="upload"></i></span>
+          <div>
+            <h2 id="export-h" class="font-display text-lg font-semibold">Export the edit</h2>
+            <p class="text-xs text-muted" id="export-summary"></p>
+          </div>
+        </div>
+        <div id="formats" class="formats" role="radiogroup" aria-label="Format"></div>
+        <div id="format-options" class="grid grid-cols-2 gap-3 max-sm:grid-cols-1"></div>
+        <div class="dialog-progress" id="export-progress" hidden>
+          <progress id="export-bar" max="1" aria-label="Export progress"></progress>
+          <span id="export-status" class="text-sm" role="status"></span>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="export-cancel" type="button" class="btn-ghost">Close</button>
+          <button id="export-go" type="button" class="btn-primary"><i data-lucide="download"></i>Export</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="help-dialog" aria-labelledby="help-h">
+      <form method="dialog" class="dialog">
+        <h2 id="help-h" class="font-display text-lg font-semibold">Keyboard shortcuts</h2>
+        <dl class="keys">
+          <dt><kbd>Space</kbd> <kbd>L</kbd></dt><dd>Play the edit from the selection; press L again to speed up</dd>
+          <dt><kbd>K</kbd></dt><dd>Stop</dd>
+          <dt><kbd>J</kbd></dt><dd>Back 5 seconds</dd>
+          <dt><kbd>,</kbd> <kbd>.</kbd></dt><dd>One frame back or forward, while stopped</dd>
+          <dt><kbd>X</kbd> <kbd>Delete</kbd></dt><dd>Strike or restore the selected words</dd>
+          <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Select the previous or next word; with <kbd>Shift</kbd>, grow the selection</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>A</kbd></dt><dd>Select every word</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>Z</kbd></dt><dd>Undo, and with <kbd>Shift</kbd>, redo</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>E</kbd></dt><dd>Export</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Stop, or close a dialog</dd>
+        </dl>
+        <p class="text-xs text-muted">With the mouse, click a word to select it and move the video there; drag or shift-click to select more. With a finger, tap a word, or drag sideways across words.</p>
+        <label class="check"><input id="eink" type="checkbox" /> E-ink screen: black on white, no motion, fewer redraws</label>
+        <div class="flex justify-end"><button type="submit" class="btn-primary">Close</button></div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,737 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/space-grotesk';
+@import 'tailwindcss';
+
+/* Dark first, as video editors are; a light theme and an e-ink theme follow the same tokens. */
+:root {
+  --app: #0d0e11;
+  --panel: #15171c;
+  --raised: #1d2027;
+  --hover: #262a33;
+  --line: #2a2e37;
+  --line-strong: #3a3f4b;
+  --fg: #e8eaef;
+  --muted: #9aa1ad;
+  --accent: #8b7cff;
+  --accent-fg: #0d0e11;
+  --accent-soft: rgba(139, 124, 255, 0.18);
+  --cut: #ff7a59;
+  --cut-soft: rgba(255, 122, 89, 0.14);
+  --wave: #5b6170;
+  --wave-kept: #a9b0bd;
+  --shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not(.eink) {
+    --app: #f4f4f6;
+    --panel: #ffffff;
+    --raised: #f7f7f9;
+    --hover: #eeeef2;
+    --line: #e3e4e9;
+    --line-strong: #cfd1d8;
+    --fg: #17181c;
+    --muted: #5f6470;
+    --accent: #5b4bdb;
+    --accent-fg: #ffffff;
+    --accent-soft: rgba(91, 75, 219, 0.12);
+    --cut: #b23a0a;
+    --cut-soft: rgba(178, 58, 10, 0.1);
+    --wave: #b9bcc6;
+    --wave-kept: #5f6470;
+    --shadow: 0 10px 30px -12px rgba(20, 20, 40, 0.25);
+    color-scheme: light;
+  }
+}
+
+/* An e-ink screen shows no colour and redraws slowly: flat black on white, nothing that moves. */
+@media (update: slow), (monochrome) {
+  :root {
+    --app: #fff;
+    --panel: #fff;
+    --raised: #fff;
+    --hover: #fff;
+    --line: #000;
+    --line-strong: #000;
+    --fg: #000;
+    --muted: #222;
+    --accent: #000;
+    --accent-fg: #fff;
+    --accent-soft: #fff;
+    --cut: #000;
+    --cut-soft: #fff;
+    --wave: #888;
+    --wave-kept: #000;
+    --shadow: none;
+    color-scheme: light;
+  }
+}
+
+:root.eink {
+  --app: #fff;
+  --panel: #fff;
+  --raised: #fff;
+  --hover: #fff;
+  --line: #000;
+  --line-strong: #000;
+  --fg: #000;
+  --muted: #222;
+  --accent: #000;
+  --accent-fg: #fff;
+  --accent-soft: #fff;
+  --cut: #000;
+  --cut-soft: #fff;
+  --wave: #888;
+  --wave-kept: #000;
+  --shadow: none;
+  color-scheme: light;
+}
+
+@theme {
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+  --color-app: var(--app);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-cut: var(--cut);
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--app);
+    color: var(--fg);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  code,
+  kbd {
+    @apply rounded border px-1 font-mono text-[0.8em];
+    border-color: var(--line);
+    background: var(--raised);
+  }
+  svg.lucide {
+    width: 16px;
+    height: 16px;
+    stroke-width: 1.9;
+    flex: none;
+  }
+}
+
+@layer components {
+  /* App shell: header, stage, timeline, status, no page scroll on a desktop */
+  .app {
+    @apply grid h-dvh overflow-hidden;
+    grid-template-rows: 48px minmax(0, 1fr) auto 28px;
+  }
+  .topbar {
+    @apply flex items-center justify-between gap-3 border-b px-3;
+    border-color: var(--line);
+    background: var(--panel);
+  }
+  .logo {
+    @apply grid size-7 place-items-center rounded-lg;
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .file-pill {
+    @apply truncate rounded-md border px-2 py-0.5 text-xs text-muted max-sm:hidden;
+    border-color: var(--line);
+    max-width: 22rem;
+  }
+  body:not(.open) .when-open {
+    display: none !important;
+  }
+
+  /* Buttons */
+  .btn-ghost,
+  .btn-primary,
+  .btn-icon,
+  .btn-bar,
+  .ghost {
+    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium whitespace-nowrap select-none;
+    transition: background-color 0.12s, border-color 0.12s;
+  }
+  .btn-ghost,
+  .ghost {
+    @apply h-8 border px-2.5;
+    border-color: var(--line);
+    background: var(--raised);
+  }
+  .btn-ghost:not(:disabled):hover,
+  .ghost:not(:disabled):hover {
+    background: var(--hover);
+    border-color: var(--line-strong);
+  }
+  .btn-primary {
+    @apply h-8 px-3 font-semibold;
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .btn-primary:not(:disabled):hover {
+    filter: brightness(1.08);
+  }
+  .btn-lg {
+    @apply h-11 px-5 text-[15px];
+  }
+  .btn-icon {
+    @apply size-8 text-muted;
+  }
+  .btn-icon:not(:disabled):hover {
+    background: var(--hover);
+    color: var(--fg);
+  }
+  .btn-link {
+    @apply cursor-pointer text-xs font-semibold underline underline-offset-2;
+    color: var(--accent);
+  }
+  button:disabled {
+    @apply cursor-default opacity-40;
+  }
+
+  /* Menus built on details/summary */
+  .menu {
+    @apply relative;
+  }
+  .menu > summary {
+    list-style: none;
+  }
+  .menu > summary::-webkit-details-marker {
+    display: none;
+  }
+  .menu-list {
+    @apply absolute right-0 z-30 mt-1.5 flex min-w-72 flex-col rounded-lg border p-1;
+    border-color: var(--line-strong);
+    background: var(--raised);
+    box-shadow: var(--shadow);
+  }
+  .menu-list button {
+    @apply flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13px];
+  }
+  .menu-list button:not(:disabled):hover,
+  .menu-list button:focus-visible {
+    background: var(--hover);
+  }
+  .menu-list small {
+    @apply block text-xs text-muted;
+  }
+
+  /* Empty state */
+  .stage {
+    @apply min-h-0;
+  }
+  .empty {
+    @apply grid h-full place-items-center p-6;
+  }
+  .drop {
+    @apply flex max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed px-10 py-12 text-center;
+    border-color: var(--line-strong);
+    background: var(--panel);
+  }
+  .drop.over {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .drop-icon {
+    @apply grid size-14 place-items-center rounded-2xl;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .drop-icon svg.lucide {
+    width: 28px;
+    height: 28px;
+  }
+  .formats-hint {
+    @apply flex flex-wrap justify-center gap-1.5 text-[11px] text-muted;
+  }
+  .formats-hint li {
+    @apply rounded border px-1.5 py-0.5;
+    border-color: var(--line);
+  }
+
+  /* Workspace: tool rail, tool panel, script, preview */
+  .workspace {
+    @apply grid h-full min-h-0;
+    grid-template-columns: 64px 300px minmax(0, 1fr) minmax(320px, 420px);
+  }
+  .rail {
+    @apply flex flex-col items-center gap-1 border-r py-2;
+    border-color: var(--line);
+    background: var(--panel);
+  }
+  .rail [role='tab'] {
+    @apply flex w-14 cursor-pointer flex-col items-center gap-1 rounded-lg py-2 text-[10px] font-medium text-muted;
+  }
+  .rail [role='tab'] svg.lucide {
+    width: 20px;
+    height: 20px;
+  }
+  .rail [role='tab']:hover {
+    background: var(--hover);
+    color: var(--fg);
+  }
+  .rail [aria-selected='true'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .panel {
+    @apply min-h-0 overflow-y-auto border-r;
+    border-color: var(--line);
+    background: var(--panel);
+  }
+  .panel-body {
+    @apply flex flex-col gap-4 p-4;
+  }
+  .panel-title {
+    @apply font-display text-[15px] font-semibold tracking-tight;
+  }
+  .field {
+    @apply flex min-w-0 flex-col gap-1.5;
+  }
+  .label {
+    @apply text-xs font-medium text-muted;
+  }
+  .label output {
+    color: var(--fg);
+  }
+  .input {
+    @apply h-8 w-full rounded-md border px-2 text-[13px];
+    border-color: var(--line);
+    background: var(--raised);
+  }
+  input[type='range'] {
+    @apply w-full;
+    accent-color: var(--accent);
+  }
+  .check {
+    @apply flex cursor-pointer items-center gap-2 text-[13px];
+  }
+  .check input {
+    @apply size-4;
+    accent-color: var(--accent);
+  }
+  .segmented {
+    @apply grid grid-cols-2 gap-1 rounded-lg p-1;
+    background: var(--app);
+  }
+  .segmented button {
+    @apply cursor-pointer rounded-md px-2 py-1.5 text-left text-[13px] font-medium;
+  }
+  .segmented button small {
+    @apply block text-[11px] font-normal text-muted;
+  }
+  .segmented button[aria-checked='true'] {
+    background: var(--raised);
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+  }
+  .tool {
+    @apply flex flex-col gap-3 rounded-xl border p-3;
+    border-color: var(--line);
+    background: var(--raised);
+  }
+  .tool-head {
+    @apply flex items-start gap-2.5;
+  }
+  .tool-head strong {
+    @apply text-[13px];
+  }
+  .tool-icon {
+    @apply grid size-8 flex-none place-items-center rounded-lg;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* Intro, outro and music slots, built by main.ts */
+  .slots {
+    @apply flex flex-col gap-2;
+  }
+  .slot {
+    @apply grid items-center gap-2 rounded-lg border p-2 pl-3;
+    grid-template-columns: 3.4rem minmax(0, 1fr) auto auto;
+    border-color: var(--line);
+    background: var(--raised);
+  }
+  .slot-label {
+    @apply text-[11px] font-semibold tracking-wide text-muted uppercase;
+  }
+  .slot-file {
+    @apply truncate text-[13px];
+  }
+  .slot-file small {
+    @apply ml-1.5 text-xs text-muted;
+  }
+  .slot-file.missing {
+    color: var(--cut);
+  }
+  .slot-file.none {
+    @apply text-muted;
+  }
+  .slot .ghost {
+    @apply h-7 px-2 text-xs;
+  }
+  .slot .remove {
+    @apply grid size-7 cursor-pointer place-items-center rounded-md text-muted;
+  }
+  .slot .remove:hover {
+    background: var(--hover);
+    color: var(--fg);
+  }
+
+  /* Script */
+  .script {
+    @apply relative min-h-0;
+    background: var(--app);
+  }
+  .script-scroll {
+    @apply h-full overflow-y-auto;
+  }
+  .script-page {
+    @apply mx-auto max-w-3xl px-10 pt-8 pb-24;
+  }
+  .script-head {
+    @apply mb-5 flex items-center justify-between border-b pb-3;
+    border-color: var(--line);
+  }
+  .cut-badge:not(:empty) {
+    @apply rounded-full px-2 py-0.5 text-xs font-semibold;
+    background: var(--cut-soft);
+    color: var(--cut);
+  }
+  .placeholder {
+    @apply flex flex-col items-center gap-2 py-16 text-center;
+  }
+  .placeholder svg.lucide {
+    @apply mb-2 text-muted;
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Floating selection bar, placed above the selection by main.ts */
+  .float-bar {
+    @apply absolute z-20 flex items-center gap-0.5 rounded-lg border p-1;
+    border-color: var(--line-strong);
+    background: var(--raised);
+    box-shadow: var(--shadow);
+  }
+  .btn-bar {
+    @apply h-8 px-2.5;
+  }
+  .btn-bar:not(:disabled):hover {
+    background: var(--hover);
+  }
+  .btn-bar kbd {
+    @apply ml-1 text-[10px] text-muted;
+  }
+
+  /* Preview */
+  .preview {
+    @apply flex min-h-0 flex-col gap-3 overflow-y-auto border-l p-3;
+    border-color: var(--line);
+    background: var(--panel);
+  }
+  .screen video {
+    @apply block aspect-video w-full rounded-lg bg-black;
+  }
+  .transport {
+    @apply flex items-center gap-3;
+  }
+  .play-btn {
+    @apply grid size-10 flex-none cursor-pointer place-items-center rounded-full;
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .play-btn svg.lucide {
+    width: 18px;
+    height: 18px;
+  }
+  .play-btn[data-playing='true'] .when-paused,
+  .play-btn[data-playing='false'] .when-playing {
+    display: none;
+  }
+  .clock {
+    @apply font-mono text-[15px] font-semibold tabular-nums;
+  }
+
+  /* Timeline */
+  .timeline {
+    @apply border-t px-3 pt-1 pb-2;
+    border-color: var(--line);
+    background: var(--panel);
+  }
+  .ruler {
+    @apply relative h-4 text-[10px] text-muted tabular-nums;
+  }
+  .ruler span {
+    @apply absolute top-0 -translate-x-1/2 whitespace-nowrap;
+  }
+  .ruler span::after {
+    content: '';
+    @apply absolute top-3.5 left-1/2 h-1.5 w-px;
+    background: var(--line-strong);
+  }
+  .track {
+    @apply relative h-16 overflow-hidden rounded-md;
+    background: var(--app);
+  }
+  .track canvas {
+    @apply block size-full;
+  }
+  .playhead {
+    @apply pointer-events-none absolute top-0 bottom-0 left-0 w-0.5 -translate-x-px;
+    background: var(--accent);
+    box-shadow: 0 0 0 1px var(--app);
+  }
+  /* the range input lies over the drawing, so the mouse, the finger and the keyboard all seek */
+  .seek {
+    @apply absolute inset-0 m-0 size-full cursor-pointer opacity-0;
+  }
+  .track:has(.seek:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Status */
+  .statusbar {
+    @apply flex items-center gap-3 border-t px-3 text-xs;
+    border-color: var(--line);
+    background: var(--panel);
+  }
+  .statusbar p {
+    @apply min-w-0 flex-1 truncate text-muted;
+  }
+  .statusbar progress,
+  .dialog-progress progress {
+    @apply h-1.5 w-48 overflow-hidden rounded-full;
+    accent-color: var(--accent);
+  }
+
+  /* Dialogs */
+  dialog {
+    @apply m-auto w-[min(34rem,calc(100vw-2rem))] rounded-2xl border p-0;
+    border-color: var(--line-strong);
+    background: var(--panel);
+    color: var(--fg);
+    box-shadow: var(--shadow);
+  }
+  dialog::backdrop {
+    background: rgba(5, 5, 8, 0.6);
+    backdrop-filter: blur(2px);
+  }
+  .dialog {
+    @apply flex flex-col gap-5 p-6;
+  }
+  .formats {
+    @apply grid grid-cols-2 gap-2 max-sm:grid-cols-1;
+  }
+  .format {
+    @apply flex cursor-pointer flex-col items-start gap-0.5 rounded-xl border p-3 text-left;
+    border-color: var(--line);
+    background: var(--raised);
+  }
+  .format strong {
+    @apply text-[13px];
+  }
+  .format small {
+    @apply text-xs text-muted;
+  }
+  .format[aria-checked='true'] {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+    background: var(--accent-soft);
+  }
+  .dialog-progress {
+    @apply flex flex-col gap-2;
+  }
+  .dialog-progress progress {
+    @apply w-full;
+  }
+  .keys {
+    @apply grid gap-x-4 gap-y-2 text-[13px];
+    grid-template-columns: auto 1fr;
+  }
+  .keys dt {
+    @apply whitespace-nowrap;
+  }
+  .keys dd {
+    @apply m-0 text-muted;
+  }
+}
+
+/* The transcript: words, pauses, strikes, the selection and the word being played */
+.transcript {
+  font-size: 17px;
+  line-height: 2;
+  outline: none;
+  user-select: none;
+  touch-action: pan-y;
+}
+.transcript .w,
+.transcript .p {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0.08em 0.1em;
+}
+.transcript .w:hover {
+  background: var(--hover);
+}
+.transcript .w.cut {
+  color: var(--cut);
+  background: var(--cut-soft);
+  text-decoration: line-through 2px;
+  opacity: 0.85;
+}
+.transcript .p {
+  display: inline-block;
+  margin: 0 0.15em;
+  padding: 0 0.55em;
+  border: 1px dashed var(--line-strong);
+  border-radius: 99px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.7;
+  vertical-align: 0.18em;
+}
+.transcript .p.marked {
+  border-style: solid;
+}
+.transcript .p.cut {
+  border-style: solid;
+  border-color: var(--cut);
+  color: var(--cut);
+  text-decoration: line-through;
+}
+.transcript .sel {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.transcript .w.cut.sel {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.transcript .now {
+  text-decoration: underline 3px var(--accent);
+  text-underline-offset: 5px;
+}
+.transcript .w.cut.now {
+  text-decoration: line-through underline 2px;
+}
+
+/* an e-ink selection is inverted, the one mark a greyscale screen shows at once */
+:root.eink .transcript .sel {
+  background: #000;
+  color: #fff;
+  box-shadow: none;
+}
+@media (update: slow), (monochrome) {
+  .transcript .sel {
+    background: #000;
+    color: #fff;
+    box-shadow: none;
+  }
+}
+
+/* fingers need room: words and buttons grow under a coarse pointer */
+@media (pointer: coarse) {
+  .transcript {
+    line-height: 2.4;
+  }
+  .transcript .w,
+  .transcript .p {
+    padding: 0.25em 0.18em;
+  }
+  .btn-icon,
+  .btn-bar,
+  .btn-ghost,
+  .btn-primary {
+    min-height: 44px;
+  }
+  .btn-icon {
+    min-width: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* A tablet or a phone: one column, the page scrolls, the selection bar stays at the bottom of the screen */
+@media (max-width: 1100px) {
+  .app {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+  .topbar {
+    @apply sticky top-0 z-30 h-12;
+  }
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .preview {
+    order: 0;
+    border-left: 0;
+  }
+  .script {
+    order: 1;
+  }
+  .script-scroll {
+    height: auto;
+    overflow: visible;
+  }
+  .script-page {
+    @apply px-4 pt-4 pb-6;
+  }
+  .rail {
+    order: 2;
+    flex-direction: row;
+    justify-content: center;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+  }
+  .rail [role='tab'] {
+    width: auto;
+    flex: 1;
+  }
+  .panel {
+    order: 3;
+    border-right: 0;
+  }
+  /* the selection bar floats above the timeline and the status bar, which stay at the bottom of the screen */
+  .float-bar {
+    position: fixed !important;
+    left: 50% !important;
+    top: auto !important;
+    bottom: calc(env(safe-area-inset-bottom) + 7.25rem);
+    transform: translateX(-50%);
+  }
+  .timeline {
+    @apply sticky z-20;
+    bottom: 1.75rem;
+  }
+  .track {
+    @apply h-12;
+  }
+  .statusbar {
+    @apply sticky bottom-0 z-20 h-7;
+  }
+  .empty {
+    min-height: 70vh;
+  }
+}
