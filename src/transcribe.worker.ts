@@ -3,6 +3,7 @@ import { env, pipeline } from '@huggingface/transformers';
 import ortMjs from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
 import ortWasm from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 import type { Word } from './lib/cuts';
+import { findFile, type ModelFile } from './lib/local-model';
 
 // the runtime comes from this site, never from a CDN, so it works offline
 env.backends.onnx.wasm!.wasmPaths = { mjs: ortMjs, wasm: ortWasm };
@@ -15,7 +16,14 @@ const WINDOW_S = 24;
 const EARLIER_S = 6;
 const LATER_S = 5;
 
-export type Request = { audio: Float32Array; model: string; language: string | null };
+export type Request = {
+  audio: Float32Array;
+  model: string;
+  language: string | null;
+  /** The model's files, picked from a folder on this device; with them nothing is downloaded. */
+  files?: ModelFile[];
+  dtype?: string;
+};
 export type Reply =
   | { type: 'progress'; file: string; loaded: number; total: number }
   | { type: 'status'; text: string }
@@ -50,11 +58,26 @@ function windows(audio: Float32Array): [number, number][] {
 }
 
 self.onmessage = async (e: MessageEvent<Request>) => {
-  const { audio, model, language } = e.data;
+  const { audio, model, language, files, dtype } = e.data;
+  if (files) {
+    // every file the model asks for comes from the folder; a request for anything else fails rather than going out
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+    env.useBrowserCache = false;
+    env.useCustomCache = true;
+    env.customCache = {
+      match: async (key: RequestInfo | URL) => {
+        const url = typeof key === 'string' ? key : key instanceof URL ? key.href : key.url;
+        const file = findFile(files, url, model);
+        return file ? new Response(file, { headers: { 'content-length': String(file.size) } }) : undefined;
+      },
+      put: async () => {},
+    };
+  }
   try {
     post({ type: 'status', text: `Loading ${model}` });
     const asr = await pipeline('automatic-speech-recognition', model, {
-      dtype: 'q4',
+      dtype: (dtype ?? 'q4') as 'q4',
       device: 'wasm',
       progress_callback: (p: { status: string; file?: string; loaded?: number; total?: number }) => {
         if (p.status === 'progress' && p.file) {

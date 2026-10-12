@@ -26,6 +26,14 @@ export type TranscribeOptions = { language: string | null; progress: Progress; s
 export type TranscriberPlugin = Named & {
   /** What it downloads the first time, in megabytes, shown before the user agrees. */
   downloadMB: number;
+  /**
+   * Asks the user for what the plugin needs before it can run, a folder for one;
+   * called from the click that starts the transcription. False when they cancel.
+   * With `again`, asks even when it already has what it needs.
+   */
+  prepare?(again?: boolean): Promise<boolean>;
+  /** One line on what the plugin holds or needs, shown under its choice. */
+  note?(): string;
   transcribe(samples: Float32Array, rate: number, options: TranscribeOptions): Promise<Word[]>;
 };
 

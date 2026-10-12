@@ -162,3 +162,26 @@ test('exports an MP4 as long as the talk minus every cut', async ({ page }) => {
   expect(Math.abs(video - (source - removed))).toBeLessThan(0.25);
   expect(Math.abs(sound - video)).toBeLessThan(0.1);
 });
+
+test('a model folder without the model says what it lacks, and downloads nothing', async ({ page, context }) => {
+  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const dir = await mkdtemp(`${tmpdir()}/whisper-`);
+  await mkdir(`${dir}/onnx`);
+  for (const f of ['config.json', 'generation_config.json', 'preprocessor_config.json', 'tokenizer.json']) await writeFile(`${dir}/${f}`, '{}');
+  const outside: string[] = [];
+  await context.route(/^(?!http:\/\/localhost:5174\/)https?:/, (r) => {
+    outside.push(r.request().url());
+    return r.abort();
+  });
+  await page.goto('/');
+  await page.locator('#video-file').setInputFiles(fixture('talk.mp4'));
+  await expect(page.locator('#status')).toContainText('is open');
+  await page.locator('#model button', { hasText: 'Your folder' }).click();
+  await expect(page.locator('#transcribe-note')).toContainText('Nothing is downloaded');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('#transcribe').click();
+  await (await chooser).setFiles(dir);
+  await expect(page.locator('#status')).toContainText('Your folder: the folder has no encoder_model and decoder_model_merged ONNX pair');
+  expect(outside).toEqual([]);
+});

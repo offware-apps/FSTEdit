@@ -441,7 +441,7 @@ function updateButtons() {
     b.setAttribute('aria-checked', String(on));
     b.tabIndex = on ? 0 : -1;
   });
-  ui.transcribeNote.textContent = `${model.detail ?? model.label}: downloads ${model.downloadMB} MB the first time, then works offline.`;
+  ui.transcribeNote.textContent = model.note?.() ?? '';
   ui.transcribe.disabled = !state.samples || busy;
   ui.transcribe.lastChild!.textContent = edit.words.length ? 'Transcribe again' : 'Transcribe';
   ui.findSilences.disabled = !state.samples;
@@ -567,7 +567,7 @@ ui.model.replaceChildren(
     b.dataset.id = m.id;
     b.textContent = m.label;
     const small = document.createElement('small');
-    small.textContent = `${m.detail ?? ''}, ${m.downloadMB} MB`;
+    small.textContent = m.downloadMB ? `${m.detail ?? ''}, ${m.downloadMB} MB` : (m.detail ?? '');
     b.append(small);
     b.addEventListener('click', () => {
       state.model = m.id;
@@ -593,10 +593,21 @@ function radioKeys(group: HTMLElement, choose: (b: HTMLButtonElement) => void) {
 radioKeys(ui.model, (b) => b.click());
 radioKeys(ui.formats, (b) => b.click());
 
-ui.transcribe.addEventListener('click', async () => {
+ui.transcribe.addEventListener('click', async (e) => {
   if (!state.samples) return;
-  if (edit.words.length && !confirm('Transcribe again? The strikes on the current transcript go, and Undo cannot bring them back.')) return;
   const plugin = pick('transcriber', state.model);
+  // a plugin that needs something from the user, a folder for one, asks while the click still counts as theirs
+  if (plugin.prepare) {
+    try {
+      if (!(await plugin.prepare(e.shiftKey))) return;
+    } catch (err) {
+      say(`${plugin.label}: ${message(err)}.`);
+      return;
+    } finally {
+      updateButtons();
+    }
+  }
+  if (edit.words.length && !confirm('Transcribe again? The strikes on the current transcript go, and Undo cannot bring them back.')) return;
   const started = performance.now();
   const words = await job(`Transcribing with ${plugin.detail ?? plugin.label}`, (progress, signal) =>
     plugin.transcribe(state.samples!, RATE, { language: ui.language.value || null, progress, signal }),

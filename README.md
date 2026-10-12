@@ -33,8 +33,8 @@ and once the model is downloaded FSTEdit works offline.
 ## What it does
 
 - **Transcribe** the talk with Whisper, a time on every word. Light is a
-  142 MB download, Best is 759 MB; both run on your device and show the time
-  left.
+  142 MB download, Best is 759 MB, and Your folder loads a model already on your
+  disk; all run on your device and show the time left.
 - **Strike** words by clicking, dragging, tapping or with the keyboard. Every
   filler word, "um", "uh", "euh", "ben", goes in one click, or one at a time
   after a look at each.
@@ -71,6 +71,13 @@ first time you transcribe, after you click the button that names its size. The
 browser then keeps the model, the app and the encoder, so FSTEdit opens and
 works with the network off.
 
+To skip even that download, choose **Your folder** and pick a folder holding a
+Whisper ONNX export with word times, such as
+[`whisper-base_timestamped`](https://huggingface.co/onnx-community/whisper-base_timestamped/tree/main):
+its `config.json`, `generation_config.json`, `preprocessor_config.json`,
+`tokenizer.json`, `tokenizer_config.json` and the `onnx/` encoder and decoder of
+one precision. FSTEdit then requests nothing from any server.
+
 ## Keyboard
 
 | Keys | Action |
@@ -97,7 +104,7 @@ under the same contract to replace or add one.
 | Kind | Built in | Contract |
 | --- | --- | --- |
 | `media` | the browser's decoders, then ffmpeg.wasm for every other format | `decodeAudio`, `playable`, tried in order |
-| `transcriber` | Whisper base and turbo through [transformers.js](https://github.com/huggingface/transformers.js) | `transcribe(samples, rate, options)` to timed words |
+| `transcriber` | Whisper base and turbo through [transformers.js](https://github.com/huggingface/transformers.js), or any Whisper export in a folder you pick | `transcribe(samples, rate, options)` to timed words; `prepare` to ask the user for what it needs |
 | `silence` | a loudness threshold | `find(samples, rate, options)` to ranges |
 | `exporter` | MP4, M4A, MP3 and GIF through [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm) | `export(job, progress, signal)` to a file, with its own options |
 | `transcript` | WebVTT, SRT | `read(text)` and `write(words)` |
