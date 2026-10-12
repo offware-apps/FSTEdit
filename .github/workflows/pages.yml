@@ -29,8 +29,9 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+      # skips onnxruntime-node's download of native binaries, which only Node uses and the page never loads
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Test
         run: npm test
       - name: Build
@@ -53,8 +54,9 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+      # skips onnxruntime-node's download of native binaries, which only Node uses and the page never loads
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
       # one test measures the exported MP4 with ffprobe
       - name: Install ffmpeg and Chromium
         run: |
