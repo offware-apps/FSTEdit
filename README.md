@@ -73,8 +73,10 @@ watch while you edit. The export always reads the original.
 Nothing about your video leaves the device. The one request FSTEdit makes is the
 model download from [Hugging Face](https://huggingface.co/onnx-community), the
 first time you transcribe, after you click the button that names its size. The
-browser then keeps the model, the app and the encoder, so FSTEdit opens and
-works with the network off.
+browser then keeps the model, the app and the encoder, so FSTEdit opens at once
+and works with the network off. A new version waits until you click **Reload to
+update** in the status bar, and keeps the model, and the encoder unless the new
+version changed it.
 
 To skip even that download, choose **Your folder** and pick a folder holding a
 Whisper ONNX export with word times, such as
@@ -130,7 +132,7 @@ register('transcriber', {
 ## Develop
 
 ```bash
-# 1. install
+# 1. install, on Node 22.12 or later
 npm install
 # 2. run it at http://localhost:5173
 npm run dev

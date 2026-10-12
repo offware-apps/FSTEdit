@@ -129,6 +129,7 @@ const ui = {
   status: $<HTMLParagraphElement>('status'),
   progress: $<HTMLProgressElement>('progress'),
   cancelJob: $<HTMLButtonElement>('cancel-job'),
+  updateApp: $<HTMLButtonElement>('update-app'),
   exportDialog: $<HTMLDialogElement>('export-dialog'),
   formats: $<HTMLDivElement>('formats'),
   formatOptions: $<HTMLDivElement>('format-options'),
@@ -1200,7 +1201,26 @@ ui.video.addEventListener('seeked', () => !player.playing && tick());
 // --- offline -------------------------------------------------------------------
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
+  // the stored app keeps serving until its user takes the new one, so an edit never changes version under them
+  const offer = (waiting: ServiceWorker) => {
+    say('A new version of FSTEdit is ready.');
+    ui.updateApp.hidden = false;
+    ui.updateApp.onclick = () => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+      waiting.postMessage('update');
+    };
+  };
+  void navigator.serviceWorker
+    .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' })
+    .then((reg) => {
+      if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const next = reg.installing;
+        next?.addEventListener('statechange', () => {
+          if (next.state === 'installed' && navigator.serviceWorker.controller) offer(next);
+        });
+      });
+    });
 }
 // the model and the engines are large; asking the browser to keep them spares a second download offline
 void navigator.storage?.persist?.().catch(() => {});
