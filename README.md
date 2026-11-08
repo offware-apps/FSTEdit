@@ -181,4 +181,4 @@ on your device and stays open.
 
 ## License
 
-[AGPL-3.0](LICENSE).
+[MIT](LICENSE).
